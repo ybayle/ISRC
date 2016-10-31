@@ -4,7 +4,7 @@
 # E-mail    bayle.yann@live.fr
 # License   MIT
 # Created   25/05/2016
-# Updated   14/10/2016
+# Updated   31/10/2016
 # Version   1.0.0
 #
 
@@ -33,150 +33,59 @@ import sys
 import csv
 import argparse
 from datetime import date
-from collections import Counter
-from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize
-from matplotlib.colorbar import ColorbarBase
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.io.shapereader as shpreader
-import numpy as np
 
-VERBOSE = True
-
-COLOR = {
-    "HEADER" : "\033[95m",
-    "OKBLUE" : "\033[94m",
-    "OKGREEN" : "\033[92m",
-    "WARNING" : "\033[93m",
-    "ERROR" : "\033[91m",
-    "FILE" : "\033[37m",
-    "ENDC" : "\033[0m",
-    "BOLD" : "\033[1m",
-    "UNDERLINE" : "\033[4m"
-}
-
-def print_error(msg):
-    """Description of print_error
-
-    Print error message and exit program
-    """
-    disp_msg = COLOR["BOLD"] + COLOR["ERROR"] + "ERROR:\n"
-    disp_msg = disp_msg + str(msg) + "\nProgram stopped" + COLOR["ENDC"]
-    print(disp_msg)
-    sys.exit()
-
-def print_info(msg):
-    """Description of print_info
-
-    Print info message
-    """
-    if VERBOSE:
-        print(COLOR["OKBLUE"] + str(msg) + COLOR["ENDC"])
-
-def print_warning(msg):
-    """Description of print_warning
-
-    Print warning message
-    """
-    if VERBOSE:
-        print(COLOR["WARNING"] + str(msg) + COLOR["ENDC"])
-
-def print_success(msg):
-    """Description of print_success
-
-    Print success message
-    """
-    if VERBOSE:
-        print(COLOR["BOLD"] + COLOR["OKGREEN"] + msg + COLOR["ENDC"])
-
-def plot_worldmap(countries, values, label='', clim=None, verbose=False):
-    """Description of plot_worldmap
-
-    This module plots a world map of countries' attribute.
-    It takes a list of countries and their corresponding values.
-    Written by Amir Zabet @ 2014/05/13
-
-    Usage: worldmap.plot(countries, values [, label] [, clim])
-    """
-    countries_shp = shpreader.natural_earth(resolution='110m', category='cultural',
-                                            name='admin_0_countries')
-    ## Create a plot
-    fig = plt.figure()
-    axe = plt.axes(projection=ccrs.PlateCarree())
-    ## Create a colormap
-    cmap = plt.cm.Blues
-    if clim:
-        vmin = clim[0]
-        vmax = clim[1]
-    else:
-        val = values[np.isfinite(values)]
-        mean = val.mean()
-        std = val.std()
-        vmin = mean-2*std
-        vmax = mean+2*std
-    norm = Normalize(vmin=vmin, vmax=vmax)
-    smap = ScalarMappable(norm=norm, cmap=cmap)
-    ax2 = fig.add_axes([0.3, 0.18, 0.4, 0.03])
-    cbar = ColorbarBase(ax2, cmap=cmap, norm=norm, orientation='horizontal')
-    cbar.set_label(label)
-    ## Add countries to the map
-    i = 0
-    for country in shpreader.Reader(countries_shp).records():
-        countrycode = country.attributes['adm0_a3']
-        countryname = country.attributes['name_long']
-        ## Check for country code consistency
-        if countrycode == 'SDS': #South Sudan
-            countrycode = 'SSD'
-        elif countrycode == 'ROU': #Romania
-            countrycode = 'ROM'
-        elif countrycode == 'COD': #Dem. Rep. Congo
-            countrycode = 'ZAR'
-        elif countrycode == 'KOS': #Kosovo
-            countrycode = 'KSV'
-        if countrycode in countries:
-            val = values[i]
-            i += 1
-            if np.isfinite(val):
-                color = smap.to_rgba(val)
-            else:
-                color = 'grey'
-        else:
-            color = 'w'
-            if verbose:
-                print("No data available for "+countrycode+": "+countryname)
-        axe.add_geometries(country.geometry, ccrs.PlateCarree(), facecolor=color, label=countryname)
-    plt.savefig('ISRC_country_repartition.png')
-    print_success("ISRC country repartition image saved")
-
-def plot_isrc_country_repartition(isrc_filename):
+def plot_isrc_country_repartition(isrc_filename="ISRC_valid.txt"):
     """Description of plot_isrc_country_repartition
-
-    TODO Cartopy does not manage log value in axes scale: found a workaround
     """
-    country = []
+    # Gather countries' name along ISO-2 codes
+    countries = {}
     with open('wikipedia-iso-country-codes.csv', 'r') as csvfile:
-        country_code_reader = csv.reader(csvfile, delimiter=',', quotechar='"')
-        for row in country_code_reader:
-            country.append([row[1], row[2]])
+        codes = csv.reader(csvfile, delimiter=',', quotechar='"')
+        for row in codes:
+            countries[row[0]] = row[1]
+    # Map nb of ISRCs with a color for each country
+    colors = {}
+    with open(isrc_filename, "r") as filep:
+        for row in filep:
+            country_code = row[0:2]
+            if country_code in colors:
+                colors[country_code] += 1
+            else:
+                colors[country_code] = 1
+    countries_shp = shpreader.natural_earth(
+        resolution='110m',
+        category='cultural',
+        name='admin_0_countries')
+    fig, axe = plt.subplots(
+        figsize=(12, 6),
+        subplot_kw={'projection': ccrs.PlateCarree()})
 
-    isrc = []
-    isrc_file = open(isrc_filename, 'r')
-    for line in isrc_file:
-        isrc.append(line[:2])
-    isrc_file.close()
+    norm = mpl.colors.Normalize(vmin=0, vmax=float(max(list(colors.values()))))
+    cmap = plt.cm.YlOrBr # or YlGnBu
 
-    tmp = Counter(isrc)
-    alpha3 = []
-    country_count = []
-    for (tmp_a2, tmp_a3) in country:
-        if tmp[tmp_a2]:
-            alpha3.append(tmp_a3)
-            country_count.append(tmp[tmp_a2])
-
-    country_count = np.array(country_count)
-    # plot_worldmap(alpha3, country_count, clim=[0, max(country_count)])
-    plot_worldmap(alpha3, country_count, clim=[0, 5000])
+    for country in shpreader.Reader(countries_shp).records():
+        country_name = country.attributes['name_long']
+        if country_name in countries:
+            country_iso2 = countries[country_name]
+            if country_iso2 in colors:
+                color = colors[country_iso2]
+            else:
+                color = -1
+        else:
+            color = -1
+        axe.add_geometries(
+            country.geometry,
+            ccrs.PlateCarree(),
+            facecolor=cmap(norm(color)),
+            label=country_name)
+    cax = fig.add_axes([0.91, 0.2, 0.02, 0.6])
+    mpl.colorbar.ColorbarBase(cax, cmap=cmap, norm=norm)
+    plt.savefig('ISRC_country_repartition.png')
+    print("ISRC country repartition image saved")
 
 def plot_isrc_year_distribution(isrc_filename="ISRC_valid.txt"):
     """Description of plot_isrc_year_distribution
@@ -193,7 +102,8 @@ def plot_isrc_year_distribution(isrc_filename="ISRC_valid.txt"):
             years.append(year)
 
     axe = plt.subplot(111)
-    plt.hist(years, bins=range(min(years), max(years) + 1, 1), color='grey')
+    hist_bins_range = range(min(years), max(years) + 1, 1)
+    plt.hist(years, bins=hist_bins_range, color='grey')
     plt.xlabel("Years")
     plt.ylabel("Numbers of ISRCs")
     plt.xlim(min(years)-2, max(years)+2)
@@ -202,7 +112,7 @@ def plot_isrc_year_distribution(isrc_filename="ISRC_valid.txt"):
     axe.get_xaxis().tick_bottom()
     axe.get_yaxis().tick_left()
     plt.savefig('ISRC_year_distribution.png')
-    print_success("ISRC year distribution image saved")
+    print("ISRC year distribution image saved")
 
 def abs_path_dir(dir_name):
     """Description of abs_path_dir
@@ -213,7 +123,8 @@ def abs_path_dir(dir_name):
     if not os.path.isfile(dir_name) and os.path.exists(dir_name):
         return os.path.abspath(dir_name)
     else:
-        print_error("Invalid directory name: " + dir_name)
+        print("Invalid directory name: " + dir_name)
+        sys.exit()
 
 def validate_isrc(isrc):
     """Description of validISRC
@@ -229,60 +140,64 @@ def validate_isrc(isrc):
     else:
         return False
 
-def validate_isrcs(input_file="isrc.txt", output_file="ISRC_invalid.txt", dir_input=None):
+def validate_isrcs(infile="isrc.txt", outfile="ISRC_invalid.txt", indir=None):
     """Description of validate_isrcs
 
     Validate a list of ISRCs contained into a file
     All line must only contain the ISRC and the \n
     """
-    rm_input_file = False
-    if dir_input:
-        dir_input = abs_path_dir(dir_input)
-        print_info("Directory to analyse: " + dir_input)
-        input_file = "tmpISRCs.txt"
-        os.system("ls " + dir_input + " > " + input_file)
-        rm_input_file = True
+    rm_infile = False
+    if indir:
+        indir = abs_path_dir(indir)
+        print("Directory to analyse: " + indir)
+        infile = "tmpISRCs.txt"
+        os.system("ls " + indir + " > " + infile)
+        rm_infile = True
     else:
-        if os.path.isfile(input_file):
-            input_file = os.path.abspath(input_file)
-            print_info("Input File: " + input_file)
+        if os.path.isfile(infile):
+            infile = os.path.abspath(infile)
         else:
-            print_error("Invalid input file")
-
-    if not os.path.isfile(output_file):
-        output_file = os.path.abspath(output_file)
+            print("Invalid input file")
+            sys.exit()
+    if not os.path.isfile(outfile):
+        outfile = os.path.abspath(outfile)
     else:
-        print_warning("Already existing output file will be overwritten")
+        print("Already existing output file will be overwritten")
 
     valid_isrcs = ""
     invalid_isrcs = ""
     cpt_invalid = 0
-    isrc_file = open(input_file, "r")
+    isrc_file = open(infile, "r")
 
-    for line in isrc_file:
-        if len(line) == 13 and validate_isrc(line[0:12]):
-            valid_isrcs = valid_isrcs + line
+    for index, line in enumerate(isrc_file):
+        isrc = line[0:12]
+        print("\t" + str(index) + "\t" + isrc)
+        sys.stdout.write("\033[F") # Cursor up one line
+        # sys.stdout.write("\033[K") # Clear line
+        # if len(line) == 13 and validate_isrc(line[0:12]):
+        if validate_isrc(isrc):
+            valid_isrcs = valid_isrcs + isrc + "\n"
         else:
-            invalid_isrcs = invalid_isrcs + line
+            invalid_isrcs = invalid_isrcs + isrc + "\n"
             cpt_invalid += 1
+    sys.stdout.write("\033[K") # Clear line
 
     isrc_file.close()
 
-    if rm_input_file:
-        os.remove(input_file)
+    if rm_infile:
+        os.remove(infile)
 
     file_valid = open("ISRC_valid.txt", "w")
     file_valid.write(valid_isrcs)
     file_valid.close()
 
     if len(invalid_isrcs) != 0:
-        print_warning(str(cpt_invalid) + " invalid ISRCs")
-        file_invalid = open(output_file, "w")
+        print(str(cpt_invalid) + " invalid ISRCs stored in: " + outfile)
+        file_invalid = open(outfile, "w")
         file_invalid.write(invalid_isrcs)
         file_invalid.close()
-        print_info("Invalid ISRCs can be seen in: " + output_file)
     else:
-        print_success("All ISRCs are valid")
+        print("All ISRCs are valid")
 
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser(description="Validate list of ISRCs")
@@ -295,11 +210,11 @@ if __name__ == "__main__":
         metavar="input_file")
     PARSER.add_argument(
         "-o",
-        "--output_file",
+        "--outfile",
         help="output file containing invalid ISRCs if any found",
         type=str,
         default="ISRC_invalid.txt",
-        metavar="output_file")
+        metavar="outfile")
     PARSER.add_argument(
         "-d",
         "--dir_input",
@@ -309,7 +224,7 @@ if __name__ == "__main__":
 
     validate_isrcs( \
         PARSER.parse_args().input_file, \
-        PARSER.parse_args().output_file, \
+        PARSER.parse_args().outfile, \
         PARSER.parse_args().dir_input)
     plot_isrc_year_distribution()
-    plot_isrc_country_repartition(PARSER.parse_args().input_file)
+    plot_isrc_country_repartition()
