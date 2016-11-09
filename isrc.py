@@ -82,10 +82,27 @@ def plot_isrc_country_repartition(isrc_filename="ISRC_valid.txt"):
             ccrs.PlateCarree(),
             facecolor=cmap(norm(color)),
             label=country_name)
+    axe.outline_patch.set_edgecolor('white')
     cax = fig.add_axes([0.91, 0.2, 0.02, 0.6])
     mpl.colorbar.ColorbarBase(cax, cmap=cmap, norm=norm)
     plt.savefig('ISRC_country_repartition.png')
     print("ISRC country repartition image saved")
+
+def stat(isrc_filename="ISRC_valid.txt"):
+    isrcs = []
+    max_year = 0
+    min_year = 100
+    with open(isrc_filename, 'r') as filep:
+        for line in filep:
+            year = int(line[5:7])
+            isrcs.append(year)
+            if year < 20 and year > max_year:
+                max_year = year
+            if year > 20 and year < min_year:
+                min_year = year
+    print(str(len(isrcs)) + " ISRCs")
+    print("Starts in 19" + str(min_year))
+    print("Ends   in 20" + str(max_year))
 
 def plot_isrc_year_distribution(isrc_filename="ISRC_valid.txt"):
     """Description of plot_isrc_year_distribution
@@ -103,9 +120,9 @@ def plot_isrc_year_distribution(isrc_filename="ISRC_valid.txt"):
 
     axe = plt.subplot(111)
     hist_bins_range = range(min(years), max(years) + 1, 1)
-    plt.hist(years, bins=hist_bins_range, color='grey')
-    plt.xlabel("Years")
-    plt.ylabel("Numbers of ISRCs")
+    plt.hist(years, bins=hist_bins_range, color="#BBBBBB")
+    plt.xlabel("Registration years")
+    plt.ylabel("ISRC number")
     plt.xlim(min(years)-2, max(years)+2)
     axe.spines['top'].set_visible(False)
     axe.spines['right'].set_visible(False)
@@ -136,9 +153,11 @@ def validate_isrc(isrc):
     """
     if len(isrc) == 12:
         pattern = re.compile("[a-zA-Z]{2}[a-zA-Z0-9]{3}[0-9]{7}")
-        return pattern.match(isrc)
-    else:
-        return False
+        if pattern.match(isrc):
+            int_isrc = int(isrc[5:7])
+            if int_isrc >= 40 or int_isrc <= 16:
+                return True
+    return False
 
 def validate_isrcs(infile="isrc.txt", outfile="ISRC_invalid.txt", indir=None):
     """Description of validate_isrcs
@@ -176,9 +195,9 @@ def validate_isrcs(infile="isrc.txt", outfile="ISRC_invalid.txt", indir=None):
         # sys.stdout.write("\033[K") # Clear line
         # if len(line) == 13 and validate_isrc(line[0:12]):
         if validate_isrc(isrc):
-            valid_isrcs = valid_isrcs + isrc + "\n"
+            valid_isrcs = valid_isrcs + line
         else:
-            invalid_isrcs = invalid_isrcs + isrc + "\n"
+            invalid_isrcs = invalid_isrcs + line
             cpt_invalid += 1
     sys.stdout.write("\033[K") # Clear line
 
@@ -228,3 +247,4 @@ if __name__ == "__main__":
         PARSER.parse_args().dir_input)
     plot_isrc_year_distribution()
     plot_isrc_country_repartition()
+    stat()
